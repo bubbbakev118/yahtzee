@@ -1,0 +1,200 @@
+package com.example.yahtzee.model;
+
+import java.util.*;
+
+public class ComputerPlayer extends Player {
+    private static final long serialVersionUID = 1L;
+    private static final double YAHTZEE_THRESHOLD = 0.8;
+    private static final double LARGE_STRAIGHT_THRESHOLD = 0.7;
+    private static final double SMALL_STRAIGHT_THRESHOLD = 0.6;
+    private static final double FULL_HOUSE_THRESHOLD = 0.5;
+    private static final double KIND_THRESHOLD = 0.4;
+
+    public ComputerPlayer(String name) {
+        super(name);
+    }
+
+    @Override
+    public boolean isComputer() {
+        return true;
+    }
+
+    @Override
+    public void takeTurn(Round round) {
+        while (shouldRollAgain(round)) {
+            currentTurn.rollDice();
+            List<Integer> diceToHold = determineDiceToHold(round);
+            for (int index : diceToHold) {
+                currentTurn.holdDie(index);
+            }
+        }
+        
+        ScoreCategory chosenCategory = chooseCategory(round, round.getScoreCard(this).getAvailableCategories());
+        round.getScoreCard(this).setScore(chosenCategory, calculateScore(chosenCategory, round.getDice()), this, round);
+    }
+
+    @Override
+    public boolean shouldRollAgain(Round round) {
+        if (currentTurn.getRollsLeft() <= 0) {
+            return false;
+        }
+        
+        // Simple strategy: always roll if we don't have three of a kind
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (int die : round.getDice()) {
+            counts.put(die, counts.getOrDefault(die, 0) + 1);
+        }
+        return counts.values().stream().noneMatch(count -> count >= 3);
+    }
+
+    @Override
+    public ScoreCategory chooseCategory(Round round, List<ScoreCategory> availableCategories) {
+        // Simple strategy: choose category with highest potential score
+        ScoreCategory bestCategory = null;
+        int maxScore = -1;
+        
+        for (ScoreCategory category : availableCategories) {
+            int score = calculateScore(category, round.getDice());
+            if (score > maxScore) {
+                maxScore = score;
+                bestCategory = category;
+            }
+        }
+        
+        return bestCategory != null ? bestCategory : availableCategories.get(0);
+    }
+
+    @Override
+    public Map<ScoreCategory, SuggestionResult> analyzePossibleMoves(ScoreCard scoreCard) {
+        Map<ScoreCategory, SuggestionResult> suggestions = new HashMap<>();
+        List<Integer> dice = currentTurn.getDice();
+        
+        for (ScoreCategory category : scoreCard.getAvailableCategories()) {
+            int score = calculateScore(category, dice);
+            String reason = String.format("Would score %d points", score);
+            suggestions.put(category, new SuggestionResult(score, reason));
+        }
+        
+        return suggestions;
+    }
+
+    @Override
+    public List<Integer> determineDiceToHold(Round round) {
+        // Simple strategy: hold dice that are part of three of a kind
+        Map<Integer, Integer> counts = new HashMap<>();
+        List<Integer> dice = round.getDice();
+        for (int die : dice) {
+            counts.put(die, counts.getOrDefault(die, 0) + 1);
+        }
+        
+        List<Integer> diceToHold = new ArrayList<>();
+        for (int i = 0; i < dice.size(); i++) {
+            if (counts.get(dice.get(i)) >= 3) {
+                diceToHold.add(i);
+            }
+        }
+        
+        return diceToHold;
+    }
+
+    @Override
+    public ScoreCategory determineNextMove(ScoreCard scoreCard) {
+        Map<ScoreCategory, SuggestionResult> suggestions = analyzePossibleMoves(scoreCard);
+        ScoreCategory bestCategory = null;
+        int maxScore = -1;
+
+        for (Map.Entry<ScoreCategory, SuggestionResult> entry : suggestions.entrySet()) {
+            int score = entry.getValue().getScore();
+            if (score > maxScore) {
+                maxScore = score;
+                bestCategory = entry.getKey();
+            }
+        }
+
+        return bestCategory != null ? bestCategory : scoreCard.getAvailableCategories().get(0);
+    }
+
+    public List<Integer> determineDiceToHold() {
+        if (currentTurn == null) {
+            return Collections.emptyList();
+        }
+
+        // Simple strategy: hold dice that are part of three of a kind
+        Map<Integer, Integer> counts = new HashMap<>();
+        List<Integer> dice = currentTurn.getDice();
+        for (int die : dice) {
+            counts.put(die, counts.getOrDefault(die, 0) + 1);
+        }
+        
+        List<Integer> diceToHold = new ArrayList<>();
+        for (int i = 0; i < dice.size(); i++) {
+            if (counts.get(dice.get(i)) >= 3) {
+                diceToHold.add(i);
+            }
+        }
+        
+        return diceToHold;
+    }
+
+    private int calculateScore(ScoreCategory category, List<Integer> dice) {
+        switch (category) {
+            case ONES:
+                return dice.stream().filter(d -> d == 1).mapToInt(Integer::intValue).sum();
+            case TWOS:
+                return dice.stream().filter(d -> d == 2).mapToInt(Integer::intValue).sum();
+            case THREES:
+                return dice.stream().filter(d -> d == 3).mapToInt(Integer::intValue).sum();
+            case FOURS:
+                return dice.stream().filter(d -> d == 4).mapToInt(Integer::intValue).sum();
+            case FIVES:
+                return dice.stream().filter(d -> d == 5).mapToInt(Integer::intValue).sum();
+            case SIXES:
+                return dice.stream().filter(d -> d == 6).mapToInt(Integer::intValue).sum();
+            case THREE_OF_A_KIND:
+                return hasNOfAKind(dice, 3) ? dice.stream().mapToInt(Integer::intValue).sum() : 0;
+            case FOUR_OF_A_KIND:
+                return hasNOfAKind(dice, 4) ? dice.stream().mapToInt(Integer::intValue).sum() : 0;
+            case FULL_HOUSE:
+                return hasFullHouse(dice) ? 25 : 0;
+            case SMALL_STRAIGHT:
+                return hasSmallStraight(dice) ? 30 : 0;
+            case LARGE_STRAIGHT:
+                return hasLargeStraight(dice) ? 40 : 0;
+            case YAHTZEE:
+                return hasNOfAKind(dice, 5) ? 50 : 0;
+            case CHANCE:
+                return dice.stream().mapToInt(Integer::intValue).sum();
+            default:
+                return 0;
+        }
+    }
+
+    private boolean hasNOfAKind(List<Integer> dice, int n) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (int die : dice) {
+            counts.put(die, counts.getOrDefault(die, 0) + 1);
+        }
+        return counts.values().stream().anyMatch(count -> count >= n);
+    }
+
+    private boolean hasFullHouse(List<Integer> dice) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (int die : dice) {
+            counts.put(die, counts.getOrDefault(die, 0) + 1);
+        }
+        return counts.values().contains(2) && counts.values().contains(3);
+    }
+
+    private boolean hasSmallStraight(List<Integer> dice) {
+        Set<Integer> uniqueDice = new HashSet<>(dice);
+        return (uniqueDice.containsAll(Arrays.asList(1, 2, 3, 4)) ||
+                uniqueDice.containsAll(Arrays.asList(2, 3, 4, 5)) ||
+                uniqueDice.containsAll(Arrays.asList(3, 4, 5, 6)));
+    }
+
+    private boolean hasLargeStraight(List<Integer> dice) {
+        Set<Integer> uniqueDice = new HashSet<>(dice);
+        return (uniqueDice.containsAll(Arrays.asList(1, 2, 3, 4, 5)) ||
+                uniqueDice.containsAll(Arrays.asList(2, 3, 4, 5, 6)));
+    }
+}
