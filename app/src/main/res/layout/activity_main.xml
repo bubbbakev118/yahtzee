@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/currentPlayerText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Current Player: "
+            android:textSize="18sp"
+            android:contentDescription="Current player name"/>
+
+        <Switch
+            android:id="@+id/helpModeSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Help Mode"
+            android:contentDescription="Toggle help mode"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/suggestionText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone"
+        android:textColor="#4CAF50"
+        android:textSize="14sp"
+        android:contentDescription="Suggestion for next move"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="16dp">
+
+        <ImageButton
+            android:id="@+id/dice1"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_margin="4dp"
+            android:contentDescription="Dice 1"/>
+
+        <ImageButton
+            android:id="@+id/dice2"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_margin="4dp"
+            android:contentDescription="Dice 2"/>
+
+        <ImageButton
+            android:id="@+id/dice3"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_margin="4dp"
+            android:contentDescription="Dice 3"/>
+
+        <ImageButton
+            android:id="@+id/dice4"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_margin="4dp"
+            android:contentDescription="Dice 4"/>
+
+        <ImageButton
+            android:id="@+id/dice5"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_margin="4dp"
+            android:contentDescription="Dice 5"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="16dp">
+
+        <Button
+            android:id="@+id/rollButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Roll"
+            android:layout_marginEnd="8dp"
+            style="@android:style/Widget.Material.Button"
+            android:contentDescription="Roll the dice"/>
+
+        <Button
+            android:id="@+id/manualDiceButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Manual Input"
+            android:layout_marginEnd="8dp"
+            style="@android:style/Widget.Material.Button"
+            android:contentDescription="Enter dice values manually"/>
+
+        <Button
+            android:id="@+id/endTurnButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="End Turn"
+            style="@android:style/Widget.Material.Button"
+            android:contentDescription="End current turn"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/rollsLeftText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Rolls Left: 3"
+        android:layout_marginTop="8dp"
+        android:contentDescription="Number of rolls left"/>
+
+    <!-- Computer Turn Information Panel -->
+    <LinearLayout
+        android:id="@+id/computerInfoPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#E8F5E9"
+        android:padding="12dp"
+        android:layout_marginTop="16dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Computer's Turn"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#1B5E20"
+            android:layout_marginBottom="8dp"/>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="120dp">
+
+            <TextView
+                android:id="@+id/computerInfoText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="15sp"
+                android:padding="8dp"
+                android:lineSpacingExtra="4dp"
+                android:textColor="#263238"
+                android:fontFamily="monospace"/>
+        </ScrollView>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/nextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Next"
+                android:layout_marginEnd="8dp"
+                style="@android:style/Widget.Material.Button"/>
+
+            <Button
+                android:id="@+id/acknowledgeButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Skip"
+                style="@android:style/Widget.Material.Button"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="16dp">
+
+        <TableLayout
+            android:id="@+id/scoreTable"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:stretchColumns="*">
+            
+            <!-- Score categories will be added programmatically -->
+            
+        </TableLayout>
+    </ScrollView>
+
+</LinearLayout>

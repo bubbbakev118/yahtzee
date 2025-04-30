@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Select Scoring Category"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="Dialog title for category selection"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <RadioGroup
+            android:id="@+id/categoryGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/aces"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Aces (Sum of 1s)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/twos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Twos (Sum of 2s)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/threes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Threes (Sum of 3s)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/fours"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Fours (Sum of 4s)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/fives"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Fives (Sum of 5s)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/sixes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Sixes (Sum of 6s)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#CCCCCC"
+                android:layout_margin="8dp"/>
+
+            <RadioButton
+                android:id="@+id/threeOfKind"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Three of a Kind"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/fourOfKind"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Four of a Kind"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/fullHouse"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Full House (25 points)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/smallStraight"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Small Straight (30 points)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/largeStraight"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Large Straight (40 points)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+
+            <RadioButton
+                android:id="@+id/yahtzee"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Yahtzee (50 points)"
+                android:padding="8dp"
+                android:textSize="16sp"/>
+        </RadioGroup>
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:layout_marginTop="16dp">
+
+        <Button
+            android:id="@+id/cancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cancel"
+            android:layout_marginEnd="8dp"
+            style="?android:attr/buttonBarButtonStyle"/>
+
+        <Button
+            android:id="@+id/confirmButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Confirm"
+            style="?android:attr/buttonBarButtonStyle"/>
+    </LinearLayout>
+</LinearLayout>

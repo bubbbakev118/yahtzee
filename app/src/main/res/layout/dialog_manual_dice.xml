@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Enter dice values (1-6)"
+        android:textSize="18sp"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="Instructions for entering dice values"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <EditText
+            android:id="@+id/dice1Input"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:maxLength="1"
+            android:gravity="center"
+            android:layout_margin="4dp"
+            android:importantForAutofill="no"
+            android:digits="123456"
+            android:contentDescription="First die value"/>
+
+        <EditText
+            android:id="@+id/dice2Input"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:maxLength="1"
+            android:gravity="center"
+            android:layout_margin="4dp"
+            android:importantForAutofill="no"
+            android:digits="123456"
+            android:contentDescription="Second die value"/>
+
+        <EditText
+            android:id="@+id/dice3Input"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:maxLength="1"
+            android:gravity="center"
+            android:layout_margin="4dp"
+            android:importantForAutofill="no"
+            android:digits="123456"
+            android:contentDescription="Third die value"/>
+
+        <EditText
+            android:id="@+id/dice4Input"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:maxLength="1"
+            android:gravity="center"
+            android:layout_margin="4dp"
+            android:importantForAutofill="no"
+            android:digits="123456"
+            android:contentDescription="Fourth die value"/>
+
+        <EditText
+            android:id="@+id/dice5Input"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:maxLength="1"
+            android:gravity="center"
+            android:layout_margin="4dp"
+            android:importantForAutofill="no"
+            android:digits="123456"
+            android:contentDescription="Fifth die value"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/errorText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#FF0000"
+        android:visibility="gone"
+        android:layout_marginTop="8dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="end">
+
+        <Button
+            android:id="@+id/cancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cancel"
+            android:layout_marginEnd="8dp"
+            style="?android:attr/buttonBarButtonStyle"/>
+
+        <Button
+            android:id="@+id/okButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="OK"
+            style="?android:attr/buttonBarButtonStyle"/>
+    </LinearLayout>
+
+</LinearLayout>

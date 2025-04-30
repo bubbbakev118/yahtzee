@@ -1,0 +1,161 @@
+package com.example.yahtzee.model;
+
+import java.util.*;
+
+public class HumanPlayer extends Player {
+    private static final long serialVersionUID = 1L;
+    private boolean wantsToRollAgain = true;
+    private List<Integer> diceToHold = new ArrayList<>();
+    private ScoreCategory selectedCategory;
+
+    public HumanPlayer(String name) {
+        super(name);
+    }
+
+    @Override
+    public boolean isComputer() {
+        return false;
+    }
+
+    @Override
+    public void takeTurn(Round round) {
+        // Human turns are controlled by the UI, so this is mostly a no-op
+        setCurrentTurn(round.getCurrentTurn());
+    }
+
+    @Override
+    public boolean shouldRollAgain(Round round) {
+        return wantsToRollAgain && currentTurn.getRollsLeft() > 0;
+    }
+
+    @Override
+    public ScoreCategory chooseCategory(Round round, List<ScoreCategory> availableCategories) {
+        if (selectedCategory == null && !availableCategories.isEmpty()) {
+            return availableCategories.get(0); // Default to first available if none selected
+        }
+        return selectedCategory;
+    }
+
+    @Override
+    public List<Integer> determineDiceToHold() {
+        return new ArrayList<>(diceToHold);
+    }
+
+    @Override
+    public Map<ScoreCategory, SuggestionResult> analyzePossibleMoves(ScoreCard scoreCard) {
+        Map<ScoreCategory, SuggestionResult> suggestions = new HashMap<>();
+        List<ScoreCategory> availableCategories = scoreCard.getAvailableCategories();
+        
+        for (ScoreCategory category : availableCategories) {
+            int score = calculateScore(category, currentTurn.getDice());
+            String reason = getReasonForScore(category, score);
+            suggestions.put(category, new SuggestionResult(category, score, reason));
+        }
+        
+        return suggestions;
+    }
+
+    @Override
+    public ScoreCategory determineNextMove(ScoreCard scoreCard) {
+        if (selectedCategory == null && !scoreCard.getAvailableCategories().isEmpty()) {
+            return scoreCard.getAvailableCategories().get(0);
+        }
+        return selectedCategory;
+    }
+
+    // Methods for UI interaction
+    public void setWantsToRollAgain(boolean wantsToRollAgain) {
+        this.wantsToRollAgain = wantsToRollAgain;
+    }
+
+    public void setDiceToHold(List<Integer> diceToHold) {
+        this.diceToHold = new ArrayList<>(diceToHold);
+    }
+
+    public void setSelectedCategory(ScoreCategory category) {
+        this.selectedCategory = category;
+    }
+
+    private int calculateScore(ScoreCategory category, List<Integer> dice) {
+        switch (category) {
+            case ONES:
+                return dice.stream().filter(d -> d == 1).mapToInt(Integer::intValue).sum();
+            case TWOS:
+                return dice.stream().filter(d -> d == 2).mapToInt(Integer::intValue).sum();
+            case THREES:
+                return dice.stream().filter(d -> d == 3).mapToInt(Integer::intValue).sum();
+            case FOURS:
+                return dice.stream().filter(d -> d == 4).mapToInt(Integer::intValue).sum();
+            case FIVES:
+                return dice.stream().filter(d -> d == 5).mapToInt(Integer::intValue).sum();
+            case SIXES:
+                return dice.stream().filter(d -> d == 6).mapToInt(Integer::intValue).sum();
+            case THREE_OF_A_KIND:
+                return hasNOfAKind(dice, 3) ? dice.stream().mapToInt(Integer::intValue).sum() : 0;
+            case FOUR_OF_A_KIND:
+                return hasNOfAKind(dice, 4) ? dice.stream().mapToInt(Integer::intValue).sum() : 0;
+            case FULL_HOUSE:
+                return hasFullHouse(dice) ? 25 : 0;
+            case SMALL_STRAIGHT:
+                return hasSmallStraight(dice) ? 30 : 0;
+            case LARGE_STRAIGHT:
+                return hasLargeStraight(dice) ? 40 : 0;
+            case YAHTZEE:
+                return hasNOfAKind(dice, 5) ? 50 : 0;
+            default:
+                return 0;
+        }
+    }
+
+    private boolean hasNOfAKind(List<Integer> dice, int n) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (int die : dice) {
+            counts.put(die, counts.getOrDefault(die, 0) + 1);
+        }
+        return counts.values().stream().anyMatch(count -> count >= n);
+    }
+
+    private boolean hasFullHouse(List<Integer> dice) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (int die : dice) {
+            counts.put(die, counts.getOrDefault(die, 0) + 1);
+        }
+        return counts.values().contains(2) && counts.values().contains(3);
+    }
+
+    private boolean hasSmallStraight(List<Integer> dice) {
+        Set<Integer> uniqueDice = new HashSet<>(dice);
+        return (uniqueDice.containsAll(Arrays.asList(1, 2, 3, 4)) ||
+                uniqueDice.containsAll(Arrays.asList(2, 3, 4, 5)) ||
+                uniqueDice.containsAll(Arrays.asList(3, 4, 5, 6)));
+    }
+
+    private boolean hasLargeStraight(List<Integer> dice) {
+        Set<Integer> uniqueDice = new HashSet<>(dice);
+        return (uniqueDice.containsAll(Arrays.asList(1, 2, 3, 4, 5)) ||
+                uniqueDice.containsAll(Arrays.asList(2, 3, 4, 5, 6)));
+    }
+
+    private String getReasonForScore(ScoreCategory category, int score) {
+        if (score == 0) {
+            return "No matching dice";
+        }
+        
+        switch (category) {
+            case YAHTZEE:
+                return score > 0 ? "All dice showing same value!" : "Different dice values";
+            case LARGE_STRAIGHT:
+                return score > 0 ? "Sequential dice 1-5 or 2-6" : "Not sequential";
+            case SMALL_STRAIGHT:
+                return score > 0 ? "Four sequential dice" : "Not enough sequential dice";
+            case FULL_HOUSE:
+                return score > 0 ? "Three of one number, two of another" : "Not a full house";
+            case FOUR_OF_A_KIND:
+                return score > 0 ? "Four dice showing same value" : "Less than four matching dice";
+            case THREE_OF_A_KIND:
+                return score > 0 ? "Three dice showing same value" : "Less than three matching dice";
+            default:
+                return score > 0 ? "Sum of matching dice" : "No matching dice";
+        }
+    }
+}
