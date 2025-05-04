@@ -206,22 +206,53 @@ public class MainActivity extends AppCompatActivity implements GameStateCallback
         helpModeSwitch = findViewById(R.id.helpModeSwitch);
         scoreTable = findViewById(R.id.scoreTable);
         
-        // Initialize Computer Info Panel
+        // Initialize Computer Info Panel with special attention to visibility
         computerInfoPanel = findViewById(R.id.computerInfoPanel);
         computerInfoText = findViewById(R.id.computerInfoText);
         acknowledgeButton = findViewById(R.id.acknowledgeButton);
         nextButton = findViewById(R.id.nextButton);
         
-        // Set up Acknowledge button listener
+        // Make sure Next button has a large touch target
+        nextButton.setMinimumWidth(dpToPx(120));
+        nextButton.setMinimumHeight(dpToPx(48));
+        
+        // Add a bright background to make it stand out
+        nextButton.setBackgroundTintList(getColorStateList(android.R.color.holo_blue_light));
+        
+        // Set up Acknowledge button listener - make sure this is responsive
         acknowledgeButton.setOnClickListener(v -> {
+            // Disable button immediately to prevent multiple clicks
+            acknowledgeButton.setEnabled(false);
+            acknowledgeButton.setText("Skipping...");
+            
+            // Hide panel visually first for immediate feedback
             computerInfoPanel.setVisibility(View.GONE);
+            
+            // Create a new thread to handle the skip action
+            new Thread(() -> {
+                try {
             if (gameController != null) {
                 // Skip the rest of the computer's turn
                 gameController.skipComputerTurnExplanation();
             }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    runOnUiThread(() -> {
+                        Toast.makeText(MainActivity.this,
+                                      "Error skipping: " + e.getMessage(),
+                                      Toast.LENGTH_SHORT).show();
+                    });
+                } finally {
+                    // Re-enable button on UI thread
+                    runOnUiThread(() -> {
+                        acknowledgeButton.setText("Skip");
+                        acknowledgeButton.setEnabled(true);
+                    });
+                }
+            }).start();
         });
         
-        // Next button is invisible by default until we need it
+        // Reset Next button to invisible
         nextButton.setVisibility(View.GONE);
         
         diceButtons = new ImageButton[5];
@@ -238,7 +269,18 @@ public class MainActivity extends AppCompatActivity implements GameStateCallback
     private void setupClickListeners() {
         rollButton.setOnClickListener(v -> {
             if (gameController != null) {
+                // Disable button temporarily to prevent multiple clicks
+                rollButton.setEnabled(false);
+                rollButton.setText("Rolling...");
+                
+                // Roll the dice
                 gameController.rollDice();
+                
+                // Re-enable button after a short delay
+                new Handler().postDelayed(() -> {
+                    rollButton.setEnabled(true);
+                    rollButton.setText("Roll");
+                }, 500);
             }
         });
 
@@ -379,6 +421,9 @@ public class MainActivity extends AppCompatActivity implements GameStateCallback
         Map<ScoreCategory, Integer> potentialScores = gameController.getPotentialScores();
         String[] items = new String[availableCategories.size()];
 
+        // Count non-zero scoring categories
+        final int nonZeroCount = countNonZeroScoringCategories(availableCategories, potentialScores);
+
         for (int i = 0; i < availableCategories.size(); i++) {
             ScoreCategory category = availableCategories.get(i);
             int potentialScore = potentialScores.getOrDefault(category, 0);
@@ -389,14 +434,47 @@ public class MainActivity extends AppCompatActivity implements GameStateCallback
 
         builder.setItems(items, (dialog, which) -> {
             ScoreCategory selectedCategory = availableCategories.get(which);
-            if (gameController.isCategoryValid(selectedCategory)) {
-                gameController.selectCategory(selectedCategory);
+            
+            // Check if trying to score 0 when other non-zero options exist
+            int score = potentialScores.getOrDefault(selectedCategory, 0);
+            if (score == 0 && nonZeroCount > 0) {
+                // Warn the player and ask for confirmation
+                new AlertDialog.Builder(this)
+                    .setTitle("Confirm Zero Score")
+                    .setMessage("You're about to score 0 points when other categories would score points. Are you sure?")
+                    .setPositiveButton("Yes, Score Zero", (confirmDialog, confirmWhich) -> {
+                        if (gameController.isCategoryValid(selectedCategory)) {
+                            gameController.selectCategory(selectedCategory);
+                        }
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
             } else {
-                onError("Category " + selectedCategory.name() + " is not available");
+                // Normal case - proceed with selection
+                if (gameController.isCategoryValid(selectedCategory)) {
+                    gameController.selectCategory(selectedCategory);
+                } else {
+                    onError("Category " + selectedCategory.name() + " is not available");
+                }
             }
         });
 
         builder.setNegativeButton("Cancel", null);
+        
+        // Add "Skip Turn" button if all scores would be zero
+        if (nonZeroCount == 0 && !availableCategories.isEmpty()) {
+            builder.setNeutralButton("Skip Turn", (dialog, which) -> {
+                // Confirm skip
+                new AlertDialog.Builder(this)
+                    .setTitle("Confirm Skip")
+                    .setMessage("Skip your turn? You won't use any category this round.")
+                    .setPositiveButton("Yes, Skip Turn", (confirmDialog, confirmWhich) -> {
+                        gameController.skipTurn("Turn skipped by player.");
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+            });
+        }
         
         AlertDialog dialog = builder.create();
         if (dialog != null) {
@@ -404,6 +482,18 @@ public class MainActivity extends AppCompatActivity implements GameStateCallback
         } else {
             onError("Could not create category selection dialog");
         }
+    }
+
+    /**
+     * Count the number of categories that would score non-zero points
+     */
+    private int countNonZeroScoringCategories(List<ScoreCategory> categories, Map<ScoreCategory, Integer> scores) {
+        int count = 0;
+        for (ScoreCategory category : categories) {
+            int score = scores.getOrDefault(category, 0);
+            if (score > 0) count++;
+        }
+        return count;
     }
 
     private void toggleHelpMode(boolean enabled) {
@@ -633,20 +723,49 @@ public class MainActivity extends AppCompatActivity implements GameStateCallback
 
     @Override
     public void onComputerTurnAnnouncement(final List<String> announcements) {
+        // Always use runOnUiThread to ensure UI updates happen on the main thread
         runOnUiThread(() -> {
-            // Build the message from all announcements
+            try {
+                // Make sure the panel is visible first
+                computerInfoPanel.setVisibility(View.VISIBLE);
+                
+                // Enable buttons
+                acknowledgeButton.setEnabled(true);
+                
+                // Limit the number of announcements to prevent memory issues
+                List<String> limitedAnnouncements = announcements;
+                if (announcements.size() > 10) {
+                    limitedAnnouncements = announcements.subList(announcements.size() - 10, announcements.size());
+                }
+                
+                // Build the message from limited announcements
             StringBuilder message = new StringBuilder();
-            for (int i = 0; i < announcements.size(); i++) {
-                message.append(announcements.get(i));
+                for (int i = 0; i < limitedAnnouncements.size(); i++) {
+                    String announcement = limitedAnnouncements.get(i);
+                    // Limit each announcement to 100 characters to prevent memory issues
+                    if (announcement.length() > 100) {
+                        announcement = announcement.substring(0, 97) + "...";
+                    }
+                    message.append(announcement);
                 // Only add newline if not the last announcement
-                if (i < announcements.size() - 1) {
+                    if (i < limitedAnnouncements.size() - 1) {
                     message.append("\n");
                 }
             }
             
-            // Update the computer info panel
-            computerInfoText.setText(message.toString());
-            computerInfoPanel.setVisibility(View.VISIBLE);
+                // Ensure total message size is reasonable
+                String finalMessage = message.toString();
+                if (finalMessage.length() > 1000) {
+                    finalMessage = finalMessage.substring(finalMessage.length() - 1000) + "...";
+                }
+                
+                // Update the text on the UI thread
+                computerInfoText.setText(finalMessage);
+            } catch (Exception e) {
+                e.printStackTrace();
+                // If there's an error, at least show something in the panel
+                computerInfoText.setText("Error displaying computer turn information: " + e.getMessage());
+            }
         });
     }
 
@@ -686,20 +805,109 @@ public class MainActivity extends AppCompatActivity implements GameStateCallback
 
     @Override
     public void onComputerTurnWaitingForUser(final String stepDescription, final Runnable callback) {
+        // Immediately make a copy of the callback to prevent GC issues
+        final Runnable callbackCopy = callback;
+        
+        // Ensure this runs on the UI thread
         runOnUiThread(() -> {
-            // Make sure computer info panel is visible
+            try {
+                // Log for debugging
+                System.out.println("Setting up Next button: " + stepDescription);
+                
+                // Make sure computer info panel is fully visible first
             computerInfoPanel.setVisibility(View.VISIBLE);
             
-            // Update Next button to show what's coming next
+                // Reset Next button to default state before configuring
+                nextButton.setOnClickListener(null);
+                nextButton.setEnabled(true);
             nextButton.setText("Next: " + stepDescription);
+                
+                // Make the button visible with a slight delay to ensure rendering
+                // This helps with Android's rendering pipeline
+                nextButton.post(() -> {
             nextButton.setVisibility(View.VISIBLE);
+                    nextButton.setEnabled(true);
             
-            // Set up Next button to call the callback when clicked
-            nextButton.setOnClickListener(v -> {
-                // Execute the callback to continue the computer's turn
+                    // Force layout to ensure visibility
+                    computerInfoPanel.requestLayout();
+                    nextButton.requestLayout();
+                });
+                
+                // Create a new OnClickListener each time to prevent stale references
+                nextButton.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        try {
+                            // Show immediate feedback
+                            nextButton.setText("Processing...");
+                            nextButton.setEnabled(false);
+                            
+                            // Run the callback in a new thread to keep UI responsive
+                            new Thread(() -> {
+                                try {
+                                    // First update UI to hide button
+                                    runOnUiThread(() -> {
                 nextButton.setVisibility(View.GONE);
-                callback.run();
-            });
+                                    });
+                                    
+                                    // Small delay to let UI update
+                                    try {
+                                        Thread.sleep(100);
+                                    } catch (InterruptedException e) {
+                                        // Ignore
+                                    }
+                                    
+                                    // Call the actual callback
+                                    if (callbackCopy != null) {
+                                        callbackCopy.run();
+                                    }
+                                } catch (Exception e) {
+                                    // Handle errors
+                                    e.printStackTrace();
+                                    runOnUiThread(() -> {
+                                        Toast.makeText(MainActivity.this, 
+                                                      "Error: " + e.getMessage(), 
+                                                      Toast.LENGTH_SHORT).show();
+                                        // Reset button to allow retry
+                                        nextButton.setText("Retry: " + stepDescription);
+                                        nextButton.setEnabled(true);
+                                        nextButton.setVisibility(View.VISIBLE);
+                                    });
+                                }
+                            }, "NextButtonThread").start();
+                        } catch (Exception e) {
+                            // Handle immediate UI errors
+                            e.printStackTrace();
+                            Toast.makeText(MainActivity.this, 
+                                          "UI Error: " + e.getMessage(), 
+                                          Toast.LENGTH_SHORT).show();
+                            // Reset button to allow retry
+                            nextButton.setText("Retry: " + stepDescription);
+                            nextButton.setEnabled(true);
+                        }
+                    }
+                });
+                
+                // Additional logging for debugging
+                System.out.println("Next button setup complete: " + (nextButton.getVisibility() == View.VISIBLE ? "VISIBLE" : "HIDDEN"));
+                
+            } catch (Exception e) {
+                // Handle errors in the setup itself
+                e.printStackTrace();
+                Toast.makeText(MainActivity.this, 
+                              "Setup Error: " + e.getMessage(), 
+                              Toast.LENGTH_SHORT).show();
+                
+                // Emergency fallback - make a simple enabled button
+                nextButton.setText("EMERGENCY NEXT");
+                nextButton.setEnabled(true);
+                nextButton.setVisibility(View.VISIBLE);
+                nextButton.setOnClickListener(v -> {
+                    if (callbackCopy != null) {
+                        callbackCopy.run();
+                    }
+                });
+            }
         });
     }
 
@@ -757,5 +965,70 @@ public class MainActivity extends AppCompatActivity implements GameStateCallback
     private int getDiceResource(int value, boolean isHeld) {
         String resourceName = String.format("dice_%d%s", value, isHeld ? "_held" : "");
         return getResources().getIdentifier(resourceName, "drawable", getPackageName());
+    }
+
+    // Add a helper method to update UI elements safely
+    private void updateUIElement(final Runnable action) {
+        if (Thread.currentThread() == getMainLooper().getThread()) {
+            // Already on UI thread
+            action.run();
+        } else {
+            // Post to UI thread
+            runOnUiThread(action);
+        }
+    }
+
+    // Helper method to convert dp to pixels
+    private int dpToPx(int dp) {
+        float density = getResources().getDisplayMetrics().density;
+        return Math.round(dp * density);
+    }
+
+    // Check if the Next button is actually visible in the onResume method
+    @Override
+    protected void onResume() {
+        super.onResume();
+        
+        // Restore Next button state if needed
+        if (gameController != null && 
+            gameController.isComputerTurnInProgress() && 
+            nextButton.getVisibility() != View.VISIBLE) {
+            nextButton.setVisibility(View.VISIBLE);
+            nextButton.setEnabled(true);
+        }
+    }
+
+    // XML click handler for Next button
+    public void onNextButtonClick(View view) {
+        // This is a backup handler for the XML onClick attribute
+        // It should only be triggered if the programmatic listener isn't working
+        
+        // Log the backup click
+        System.out.println("Backup Next button handler triggered");
+        
+        // Enable the button in case it was disabled
+        nextButton.setEnabled(true);
+        
+        // Force a click event on the button
+        if (nextButton.hasOnClickListeners()) {
+            nextButton.performClick();
+        } else {
+            // If there's no listener at all, tell the user
+            Toast.makeText(this, "Next action not available, please try again", Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    // XML click handler for Skip button
+    public void onSkipButtonClick(View view) {
+        // This is a backup handler for the XML onClick attribute
+        
+        // Log the backup click
+        System.out.println("Backup Skip button handler triggered");
+        
+        // Enable the button in case it was disabled
+        acknowledgeButton.setEnabled(true);
+        
+        // Force a click on the actual button
+        acknowledgeButton.performClick();
     }
 }

@@ -125,28 +125,39 @@ public class GameController {
      * @return true if the roll was successful, false otherwise
      */
     public boolean rollDice() {
-            if (currentTurn == null) {
+        if (currentTurn == null) {
             if (gameStateCallback != null) {
                 gameStateCallback.onError("Cannot roll dice - no active turn");
             }
             return false;
-            }
-            
-            if (currentTurn.getRollsLeft() <= 0) {
+        }
+        
+        if (currentTurn.getRollsLeft() <= 0) {
             if (gameStateCallback != null) {
                 gameStateCallback.onError("No rolls left! Select a category to score");
             }
             return false;
         }
 
-        currentTurn.rollDice();
-
-        if (gameStateCallback != null) {
-            gameStateCallback.onDiceRolled(currentTurn.getDice(), currentTurn.getHeldDiceIndices());
-        }
-        
-        // Check if we need to auto-end the turn after this roll
-        checkAndAutoEndTurn();
+        // Run the actual dice rolling in a background thread to keep UI responsive
+        new Thread(() -> {
+            try {
+                // Roll the dice
+                currentTurn.rollDice();
+                
+                // Notify UI on the main thread
+                if (gameStateCallback != null) {
+                    gameStateCallback.onDiceRolled(currentTurn.getDice(), currentTurn.getHeldDiceIndices());
+                }
+                
+                // Check if we need to auto-end the turn after this roll
+                checkAndAutoEndTurn();
+            } catch (Exception e) {
+                if (gameStateCallback != null) {
+                    gameStateCallback.onError("Error rolling dice: " + e.getMessage());
+                }
+            }
+        }).start();
         
         return true;
     }
@@ -369,10 +380,22 @@ public class GameController {
                 // Start next turn with the switched player
                 startNewTurn();
                 
-                // If we switched to computer and it wasn't previously the computer's turn,
-                // we need to explicitly start the computer's turn
-                if (tournament.getCurrentPlayer().isComputer() && !wasComputerTurn) {
-                    playComputerTurn();
+                // If we switched from human to computer, we need to ensure the computer's turn starts properly
+                if (!wasComputerTurn && tournament.getCurrentPlayer().isComputer()) {
+                    // Add a short delay to ensure UI has time to update before starting computer turn
+                    new Thread(() -> {
+                        try {
+                            // Give the UI thread time to update
+                            Thread.sleep(500);
+                            
+                            // Start computer turn in a new thread
+                            if (tournament.getCurrentPlayer().isComputer()) {
+                                playComputerTurn();
+                            }
+                        } catch (InterruptedException e) {
+                            // Ignore
+                        }
+                    }).start();
                 }
             }
             
@@ -408,170 +431,281 @@ public class GameController {
      * Handles the computer player's turn with step-by-step user control.
      */
     public void playComputerTurn() {
-        // Initialize state
+        // Validate current state first
+        if (tournament == null || currentRound == null || currentTurn == null) {
+            if (gameStateCallback != null) {
+                gameStateCallback.onError("Cannot start computer turn - invalid game state");
+                gameStateCallback.onComputerTurnEnd();
+            }
+            return;
+        }
+        
+        // Make sure the current player is the computer
+        Player currentPlayer = tournament.getCurrentPlayer();
+        if (currentPlayer == null || !currentPlayer.isComputer()) {
+            if (gameStateCallback != null) {
+                gameStateCallback.onError("Cannot start computer turn - current player is not computer");
+                gameStateCallback.onComputerTurnEnd();
+            }
+            return;
+        }
+        
+        // Set state flags
         isComputerTurnInProgress = true;
         skipComputerExplanations = false;
         
-        // Create and start computer turn thread
+        // Show initial UI update on main thread
+        if (gameStateCallback != null) {
+            gameStateCallback.onComputerTurnAnnouncement(Collections.singletonList("Computer's turn starting..."));
+        }
+        
+        // Create and start computer turn thread with a meaningful name
         computerTurnThread = new Thread(() -> {
             try {
-                Player computer = tournament.getCurrentPlayer();
-                if (!computer.isComputer()) {
+                // Double check that we're still on the computer's turn
+                if (tournament.getCurrentPlayer() == null || !tournament.getCurrentPlayer().isComputer()) {
+                    gameStateCallback.onError("Computer turn thread started but current player is not computer");
+                    gameStateCallback.onComputerTurnEnd();
                     isComputerTurnInProgress = false;
                     return;
                 }
 
-                ComputerPlayer computerPlayer = (ComputerPlayer) computer;
-                ComputerPlayerActions computerActions = computerPlayer;
+                ComputerPlayer computerPlayer = (ComputerPlayer) tournament.getCurrentPlayer();
                 
-                // 1. Initialize turn and show start message
+                // Initialize turn - this should populate the UI with initial explanations
                 computerPlayer.takeTurn(currentRound);
                 
-                // Main turn loop
-                while (currentTurn.getRollsLeft() > 0 && !skipComputerExplanations) {
-                    // 2. Wait for user to click Next before rolling
-                    waitForUserInput("Roll Dice", () -> {
-                        try {
-                            // Show roll request and perform roll
-                    gameStateCallback.onComputerRollRequest();
-                            rollRandomComputerDice();
-                            
-                            // If turn was auto-ended, exit
-                            if (currentTurn == null || currentTurn.isComplete()) {
-                                gameStateCallback.onComputerTurnEnd();
-                                isComputerTurnInProgress = false;
-                                return;
-                            }
-                            
-                            // Wait for user to click Next before analyzing
-                            waitForUserInput("Analyze Roll", () -> {
-                                // Analyze current roll
-                    computerPlayer.analyzeCurrentState();
-                                
-                                // Wait for user to click Next before making roll decision
-                                waitForUserInput("Make Decision", () -> {
-                                    // Decide whether to roll again
-                                    boolean rollAgain = computerPlayer.shouldRollAgain(currentRound);
-                                    
-                                    if (!rollAgain) {
-                                        // If not rolling again, exit the loop
-                                        continueComputerTurnAfterRolls();
-                                    }
-                                });
-                            });
-                        } catch (Exception e) {
-                            gameStateCallback.onError("Error during computer turn: " + e.getMessage());
-                            isComputerTurnInProgress = false;
-                        }
-                    });
+                // Delay before showing the first prompt to give UI time to update
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
+                
+                // Main turn loop - only run while we have rolls left and aren't skipping
+                while (currentTurn != null && !currentTurn.isComplete() && 
+                       currentTurn.getRollsLeft() > 0 && !skipComputerExplanations) {
                     
-                    // If skip flag was set or we break from the loop, exit
-                    if (skipComputerExplanations || !computerPlayer.shouldRollAgain(currentRound)) {
+                    // User interface breaks the turn into discrete steps with user confirmation
+                    processComputerTurnStep(computerPlayer);
+                    
+                    // Break if we should stop rolling or the user skipped
+                    if (skipComputerExplanations || currentTurn == null || 
+                        currentTurn.isComplete() || !computerPlayer.shouldRollAgain(currentRound)) {
                         break;
                     }
                 }
                 
-                // If skip flag set, continue immediately to finalizing the turn
-                if (skipComputerExplanations) {
-                    continueComputerTurnAfterRolls();
+                // Process final step if we didn't skip
+                if (!skipComputerExplanations && currentTurn != null && !currentTurn.isComplete()) {
+                    // Make category selection
+                    finishComputerTurn();
+                } else if (skipComputerExplanations) {
+                    // Fast-track finish if skipped
+                    finishComputerTurn();
                 }
                 
             } catch (Exception e) {
-                gameStateCallback.onError("Error during computer turn: " + e.getMessage());
-                gameStateCallback.onComputerTurnEnd();
+                System.err.println("Error during computer turn: " + e.getMessage());
+                e.printStackTrace();
+                
+                if (gameStateCallback != null) {
+                    gameStateCallback.onError("Error during computer turn: " + e.getMessage());
+                    gameStateCallback.onComputerTurnEnd();
+                }
+                
                 isComputerTurnInProgress = false;
             }
-        });
+        }, "ComputerTurnThread");
         
+        // Start as a daemon thread to ensure it doesn't prevent app exit
+        computerTurnThread.setDaemon(true);
         computerTurnThread.start();
     }
     
     /**
-     * Continues the computer turn after all rolls are complete.
+     * Process a single step of the computer's turn.
      */
-    private void continueComputerTurnAfterRolls() {
-        try {
-            // Check if the turn was already auto-ended
-            if (currentTurn == null || currentTurn.isComplete()) {
-                gameStateCallback.onComputerTurnEnd();
-                isComputerTurnInProgress = false;
-                return;
-            }
-            
-            // Get current player and scorecard
-            Player computer = tournament.getCurrentPlayer();
-            if (!computer.isComputer()) {
-                isComputerTurnInProgress = false;
-                return;
-            }
-            
-            ComputerPlayer computerPlayer = (ComputerPlayer) computer;
-            ComputerPlayerActions computerActions = computerPlayer;
-            ScoreCard sharedScoreCard = tournament.getScoreCard();
-            
-            // Check if all potential scores are 0
-            Map<ScoreCategory, Integer> potentialScores = getPotentialScores();
-            boolean allZeros = potentialScores.values().stream().allMatch(score -> score == 0);
-            
-            if (allZeros && !getAvailableCategories().isEmpty()) {
-                // Handle all-zero case
-                ScoreCategory categoryToScore = getAvailableCategories().stream()
-                    .filter(ScoreCategory::isUpperSection)
-                    .findFirst()
-                    .orElse(getAvailableCategories().get(0));
+    private void processComputerTurnStep(ComputerPlayer computerPlayer) {
+        // Use a CountDownLatch to wait for the step to complete
+        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        final boolean[] stepCompleted = {false};
+        
+        // Request the user to click Next before rolling
+        waitForUserInput("Roll Dice", () -> {
+            try {
+                // Show rolling message
+                gameStateCallback.onComputerRollRequest();
                 
-                // Add explanation
-                computerActions.addExplanationMessage("Auto-Scoring", 
-                    "All categories would score 0. Auto-selecting " + categoryToScore.getDisplayName());
+                // Short delay for UI feedback
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
                 
-                // Wait for user to click Next before scoring
-                waitForUserInput("Score Category", () -> {
-                    // Score the category and end turn
-                    selectCategory(categoryToScore);
-                    gameStateCallback.onComputerTurnEnd();
-                    isComputerTurnInProgress = false;
+                // Roll the dice
+                rollRandomComputerDice();
+                
+                // Check if the turn ended after rolling
+                if (currentTurn == null || currentTurn.isComplete()) {
+                    stepCompleted[0] = true;
+                    latch.countDown();
+                    return;
+                }
+                
+                // Another short delay for UI to update
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
+                
+                // Request user to click Next before analyzing
+                waitForUserInput("Analyze Roll", () -> {
+                    try {
+                        // Analyze the current roll
+                        computerPlayer.analyzeCurrentState();
+                        
+                        // Short delay for UI to update
+                        try {
+                            Thread.sleep(300);
+                        } catch (InterruptedException e) {
+                            // Ignore
+                        }
+                        
+                        // Wait for user to click Next before making roll decision
+                        waitForUserInput("Make Decision", () -> {
+                            try {
+                                // The computer decides whether to roll again
+                                boolean rollAgain = computerPlayer.shouldRollAgain(currentRound);
+                                
+                                // Mark the step as complete
+                                stepCompleted[0] = true;
+                                latch.countDown();
+                            } catch (Exception e) {
+                                gameStateCallback.onError("Error during decision: " + e.getMessage());
+                                latch.countDown();
+                            }
+                        });
+                    } catch (Exception e) {
+                        gameStateCallback.onError("Error during analysis: " + e.getMessage());
+                        latch.countDown();
+                    }
                 });
+            } catch (Exception e) {
+                gameStateCallback.onError("Error during roll: " + e.getMessage());
+                latch.countDown();
+            }
+        });
+        
+        // Wait for the entire step to complete or timeout after 30 seconds
+        try {
+            latch.await(30, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            // If interrupted, just continue
+        }
+        
+        // If step didn't complete and we're not skipping, something went wrong
+        if (!stepCompleted[0] && !skipComputerExplanations) {
+            gameStateCallback.onError("Computer turn step timed out");
+        }
+    }
+    
+    /**
+     * Complete the computer's turn by making the final category selection.
+     */
+    private void finishComputerTurn() {
+        try {
+            // Verify we still have a valid game state
+            if (tournament == null || currentRound == null || currentTurn == null || 
+                tournament.getCurrentPlayer() == null || !tournament.getCurrentPlayer().isComputer()) {
+                isComputerTurnInProgress = false;
+                gameStateCallback.onComputerTurnEnd();
                 return;
             }
             
-            // Determine best category choice
-            ScoreCategory bestCategory = computerPlayer.determineNextMove(sharedScoreCard);
+            // Get computer player
+            ComputerPlayer computerPlayer = (ComputerPlayer) tournament.getCurrentPlayer();
             
-            // Fallback if no best category found
+            // First analyze the current state to make the best decision
+            computerPlayer.analyzeCurrentState();
+            
+            // Get the best category to score
+            ScoreCategory bestCategory = computerPlayer.determineNextMove(tournament.getScoreCard());
+            
+            // EXTRA VALIDATION: Make sure computer never chooses a zero-scoring category
+            // when there are other scoring options available
+            if (bestCategory != null) {
+                ScoreCard scoreCard = tournament.getScoreCard();
+                List<Integer> dice = currentTurn.getDice();
+                int score = scoreCard.calculateScore(bestCategory, dice);
+                
+                // Only proceed with additional checks if the selected category would score zero
+                if (score == 0) {
+                    // Check if there are any non-zero scoring categories available
+                    List<ScoreCategory> nonZeroCategories = new ArrayList<>();
+                    Map<ScoreCategory, Integer> categoryScores = new HashMap<>();
+                    
+                    for (ScoreCategory category : getAvailableCategories()) {
+                        int categoryScore = scoreCard.calculateScore(category, dice);
+                        categoryScores.put(category, categoryScore);
+                        if (categoryScore > 0) {
+                            nonZeroCategories.add(category);
+                        }
+                    }
+                    
+                    // If we have non-zero options, use the highest scoring one instead
+                    if (!nonZeroCategories.isEmpty()) {
+                        ScoreCategory highestScoringCategory = null;
+                        int highestScore = -1;
+                        
+                        for (ScoreCategory category : nonZeroCategories) {
+                            int categoryScore = categoryScores.get(category);
+                            if (categoryScore > highestScore) {
+                                highestScore = categoryScore;
+                                highestScoringCategory = category;
+                            }
+                        }
+                        
+                        if (highestScoringCategory != null) {
+                            System.out.println("GameController overriding computer choice from " + 
+                                bestCategory.getDisplayName() + " (0 pts) to " + 
+                                highestScoringCategory.getDisplayName() + " (" + 
+                                categoryScores.get(highestScoringCategory) + " pts)");
+                            bestCategory = highestScoringCategory;
+                        }
+                    }
+                }
+            }
+            
+            // Fallback to first available category if needed
             if (bestCategory == null && !getAvailableCategories().isEmpty()) {
                 bestCategory = getAvailableCategories().get(0);
-                computerActions.addExplanationMessage("Error Recovery", 
-                    "Could not determine best category, selecting " + bestCategory.getDisplayName() + " as fallback.");
             }
             
-            if (bestCategory == null) {
-                gameStateCallback.onError("Computer turn error: No categories available");
-                gameStateCallback.onComputerTurnEnd();
-                isComputerTurnInProgress = false;
-                return;
-            }
-            
-            // Get score for chosen category
-            final ScoreCategory finalCategory = bestCategory;
-            int score = sharedScoreCard.calculateScore(finalCategory, currentTurn.getDice());
-            
-            // Show final decision
-            computerActions.addExplanationMessage("Final Decision",
-                String.format("Selected %s for %d points with dice %s", 
-                    finalCategory.getDisplayName(), 
-                    score,
-                    computerActions.formatDiceValuesString(currentTurn.getDice())));
-            
-            // Wait for user to click Next before finalizing
-            waitForUserInput("Finalize Turn", () -> {
-                // Score the category and end turn
+            // If we have a category, score it
+            if (bestCategory != null) {
+                // Get score for logging
+                int score = tournament.getScoreCard().calculateScore(bestCategory, currentTurn.getDice());
+                
+                // Log the decision
+                System.out.println("Computer scored " + bestCategory + " for " + score + " points");
+                
+                // Score the category
+                final ScoreCategory finalCategory = bestCategory;
                 selectCategory(finalCategory);
-                gameStateCallback.onComputerTurnEnd();
-                isComputerTurnInProgress = false;
-            });
+            }
+            
+            // End the computer turn
+            gameStateCallback.onComputerTurnEnd();
+            isComputerTurnInProgress = false;
             
         } catch (Exception e) {
-            gameStateCallback.onError("Error finalizing computer turn: " + e.getMessage());
+            System.err.println("Error finishing computer turn: " + e.getMessage());
+            e.printStackTrace();
+            
+            gameStateCallback.onError("Error finishing computer turn: " + e.getMessage());
             gameStateCallback.onComputerTurnEnd();
             isComputerTurnInProgress = false;
         }
@@ -664,73 +798,113 @@ public class GameController {
             }
         }
         
-        // If all potential scores are zero, automatically end the turn
+        // If all potential scores are zero, automatically end the turn without scoring
         if (allZeros && !getAvailableCategories().isEmpty()) {
-            // Find the first available category to assign zero (preferably choose a lower value upper section)
-            ScoreCategory categoryToAssign = null;
-            
-            // First try to find an upper section category (they're typically worth less)
-            for (ScoreCategory category : getAvailableCategories()) {
-                if (category.isUpperSection()) {
-                    categoryToAssign = category;
-                    break;
-                }
-            }
-            
-            // If no upper section category is available, take the first lower section category
-            if (categoryToAssign == null && !getAvailableCategories().isEmpty()) {
-                categoryToAssign = getAvailableCategories().get(0);
-            }
-            
-            if (categoryToAssign != null) {
-                // Notify the user that turn is being auto-ended
-                if (gameStateCallback != null) {
-                    gameStateCallback.onError("No possible points available. Automatically scoring " + 
-                            categoryToAssign.getDisplayName() + " with 0 points.");
-                }
-                
-                // Also record this player as the scorer for this category
-                tournament.recordCategoryScorer(categoryToAssign, currentPlayer);
-                
-                // Select the category (which will handle switching to the next player)
-                selectCategory(categoryToAssign);
-                return true;
-            }
+            skipTurn("No possible points available. Skipping turn.");
+            return true;
         }
         
         return false;
     }
+    
+    /**
+     * Skips the current player's turn without scoring in any category.
+     * This should only be used when all categories would yield zero points.
+     * 
+     * @param reason The reason for skipping, shown to the player
+     * @return true if the turn was successfully skipped
+     */
+    public boolean skipTurn(String reason) {
+        if (tournament == null || currentRound == null) {
+            gameStateCallback.onError("Game not properly initialized");
+            return false;
+        }
+        
+        // Add notification that turn is being skipped
+        if (gameStateCallback != null) {
+            gameStateCallback.onError(reason);
+        }
+        
+        // Switch to the next player (this will advance the turn in the tournament)
+        tournament.switchToNextPlayer();
+        
+        // Update the current turn reference
+        if (tournament.getCurrentTurn() != null) {
+            currentTurn = tournament.getCurrentTurn();
+        }
+        
+        // Start the next player's turn
+        boolean autoEndedTurn = currentTurn.getRollsLeft() <= 0 && checkAndAutoEndTurn();
+        
+        // Start computer turn if it's now the computer's turn and we didn't auto-end the turn
+        if (tournament.getCurrentPlayer().isComputer() && !autoEndedTurn) {
+            playComputerTurn();
+        }
+        
+        return true;
+    }
 
+    /**
+     * Called when the user wants to skip computer turn explanations.
+     * This will mark the explanations to be skipped and execute the next action immediately.
+     */
     public void skipComputerTurnExplanation() {
+        System.out.println("User requested to skip computer turn explanation");
+        
+        // Set the flag to skip explanations
         skipComputerExplanations = true;
         
-        // If there's a computer turn thread running, interrupt it
-        if (computerTurnThread != null && computerTurnThread.isAlive()) {
-            computerTurnThread.interrupt();
-        }
-        
-        // If computer turn was in progress, fast-forward to the end
-        if (isComputerTurnInProgress && currentTurn != null && !currentTurn.isComplete()) {
+        // Create a background thread to handle the skip logic
+        new Thread(() -> {
             try {
-                // Get the best category and score it
-                Player computer = tournament.getCurrentPlayer();
-                if (computer.isComputer()) {
-                    ComputerPlayer computerPlayer = (ComputerPlayer) computer;
-                    ScoreCard scoreCard = tournament.getScoreCard();
-                    ScoreCategory bestCategory = computerPlayer.determineNextMove(scoreCard);
-                    
-                    if (bestCategory != null) {
-                        // Score the category and end turn
-                        selectCategory(bestCategory);
-                    }
+                // Make sure we're actually in a computer turn
+                if (!isComputerTurnInProgress) {
+                    System.out.println("Skip requested but no computer turn in progress");
+                    return;
                 }
+                
+                // Verify we have a valid game state
+                if (tournament == null || currentRound == null || currentTurn == null || 
+                    tournament.getCurrentPlayer() == null || !tournament.getCurrentPlayer().isComputer()) {
+                    System.out.println("Skip requested but invalid game state");
+                    isComputerTurnInProgress = false;
+                    gameStateCallback.onComputerTurnEnd();
+                    return;
+                }
+                
+                System.out.println("Processing skip request...");
+                
+                // Finish the turn immediately
+                finishComputerTurn();
+                
             } catch (Exception e) {
-                gameStateCallback.onError("Error skipping computer turn: " + e.getMessage());
-            } finally {
-                // Clean up and end the turn
-                gameStateCallback.onComputerTurnEnd();
+                System.err.println("Error during skip: " + e.getMessage());
+                e.printStackTrace();
+                
+                if (gameStateCallback != null) {
+                    gameStateCallback.onError("Error skipping: " + e.getMessage());
+                    gameStateCallback.onComputerTurnEnd();
+                }
+                
                 isComputerTurnInProgress = false;
             }
-        }
+        }, "SkipComputerTurnThread").start();
+    }
+
+    /**
+     * Legacy method kept for backward compatibility.
+     * @deprecated Use finishComputerTurn() instead
+     */
+    private void continueComputerTurnAfterRolls() {
+        // Redirect to the new method
+        finishComputerTurn();
+    }
+
+    /**
+     * Checks if a computer turn is currently in progress.
+     * @return true if computer turn is in progress, false otherwise
+     */
+    public boolean isComputerTurnInProgress() {
+        return isComputerTurnInProgress;
     }
 }

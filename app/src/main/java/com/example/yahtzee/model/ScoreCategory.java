@@ -60,7 +60,7 @@ public enum ScoreCategory {
             case SIXES:
                 return sumMatchingDice(dice, 6);
             case THREE_OF_A_KIND:
-                return hasNOfAKind(dice, 3) ? sumAllDice(dice) : 0;
+                return hasNOfAKind(dice, 3) ? sumThreeOfAKindDice(dice) : 0;
             case FOUR_OF_A_KIND:
                 return hasNOfAKind(dice, 4) ? sumAllDice(dice) : 0;
             case FULL_HOUSE:
@@ -87,6 +87,22 @@ public enum ScoreCategory {
         return dice.stream()
                   .mapToInt(Integer::intValue)
                   .sum();
+    }
+
+    private static int sumThreeOfAKindDice(List<Integer> dice) {
+        Map<Integer, Long> counts = dice.stream()
+            .collect(HashMap::new, (m, d) -> m.merge(d, 1L, Long::sum), HashMap::putAll);
+        
+        // Find the value that appears 3 or more times
+        for (Map.Entry<Integer, Long> entry : counts.entrySet()) {
+            if (entry.getValue() >= 3) {
+                // Return 3 times the value that appears 3+ times
+                return entry.getKey() * 3;
+            }
+        }
+        
+        // This should never happen if hasNOfAKind(dice, 3) is true
+        return 0;
     }
 
     private static boolean hasNOfAKind(List<Integer> dice, int n) {

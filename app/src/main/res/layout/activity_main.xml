@@ -137,6 +137,7 @@
         android:background="#E8F5E9"
         android:padding="12dp"
         android:layout_marginTop="16dp"
+        android:elevation="8dp"
         android:visibility="gone">
 
         <TextView
@@ -144,23 +145,30 @@
             android:layout_height="wrap_content"
             android:text="Computer's Turn"
             android:textStyle="bold"
-            android:textSize="16sp"
+            android:textSize="18sp"
             android:textColor="#1B5E20"
             android:layout_marginBottom="8dp"/>
 
         <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="120dp">
+            android:layout_height="150dp"
+            android:background="#FFFFFF"
+            android:padding="4dp"
+            android:scrollbarStyle="insideOverlay"
+            android:fadeScrollbars="false"
+            android:scrollbarSize="6dp">
 
             <TextView
                 android:id="@+id/computerInfoText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:padding="8dp"
                 android:lineSpacingExtra="4dp"
                 android:textColor="#263238"
-                android:fontFamily="monospace"/>
+                android:fontFamily="sans-serif"
+                android:background="#FFFFFF"
+                android:textIsSelectable="true"/>
         </ScrollView>
 
         <LinearLayout
@@ -168,21 +176,38 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="end"
-            android:layout_marginTop="8dp">
+            android:layout_marginTop="12dp">
 
             <Button
                 android:id="@+id/nextButton"
-                android:layout_width="wrap_content"
+                android:layout_width="120dp"
                 android:layout_height="wrap_content"
                 android:text="Next"
-                android:layout_marginEnd="8dp"
-                style="@android:style/Widget.Material.Button"/>
+                android:layout_marginEnd="12dp"
+                android:padding="12dp"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:background="@android:color/holo_blue_light"
+                android:elevation="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:textAllCaps="false"
+                android:stateListAnimator="@null"
+                android:onClick="onNextButtonClick"
+                style="@android:style/Widget.Material.Button.Colored"/>
 
             <Button
                 android:id="@+id/acknowledgeButton"
-                android:layout_width="wrap_content"
+                android:layout_width="120dp"
                 android:layout_height="wrap_content"
                 android:text="Skip"
+                android:padding="12dp"
+                android:textSize="16sp"
+                android:clickable="true"
+                android:focusable="true"
+                android:textAllCaps="false"
+                android:elevation="8dp"
+                android:onClick="onSkipButtonClick"
                 style="@android:style/Widget.Material.Button"/>
         </LinearLayout>
     </LinearLayout>
